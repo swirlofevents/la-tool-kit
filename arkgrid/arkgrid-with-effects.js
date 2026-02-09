@@ -1922,6 +1922,66 @@ function saveGemEdit() {
 
 let currentOCRImage = null;
 
+// Препроцессинг изображения для улучшения OCR
+function preprocessImage(imageData) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = function() {
+            // Создаём canvas с увеличенным размером (upscaling в 3 раза для лучшего качества)
+            const canvas = document.createElement('canvas');
+            const scale = 3;
+            canvas.width = img.width * scale;
+            canvas.height = img.height * scale;
+            const ctx = canvas.getContext('2d');
+
+            // Отрисовываем увеличенное изображение с сглаживанием
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            // Получаем пиксели
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imgData.data;
+
+            // Конвертируем в градации серого
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+
+                const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+
+                data[i] = gray;
+                data[i + 1] = gray;
+                data[i + 2] = gray;
+            }
+
+            ctx.putImageData(imgData, 0, 0);
+
+            const finalData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const finalPixels = finalData.data;
+
+            // Подбираем порог - для жёлтого текста на тёмном фоне нужен низкий порог
+            const threshold = 100;
+
+            for (let i = 0; i < finalPixels.length; i += 4) {
+                const brightness = finalPixels[i];
+                const value = brightness > threshold ? 255 : 0;
+
+                finalPixels[i] = value;
+                finalPixels[i + 1] = value;
+                finalPixels[i + 2] = value;
+            }
+
+            ctx.putImageData(finalData, 0, 0);
+
+            resolve(canvas.toDataURL());
+        };
+        img.src = imageData;
+    });
+}
+
+
 function openOCRModal() {
     document.getElementById('ocr-modal').style.display = 'flex';
     resetOCRModal();
@@ -2028,10 +2088,19 @@ async function processOCRImage() {
             }
         });
 
+        // Настраиваем параметры Tesseract для лучшего распознавания
+        await worker.setParameters({
+            tessedit_char_whitelist: 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя0123456789.| ',
+            tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+        });
+
         statusText.textContent = 'Обработка изображения...';
         progressFill.style.width = '20%';
 
-        const { data: { text } } = await worker.recognize(currentOCRImage);
+        // Применяем препроцессинг к изображению
+        const preprocessedImage = await preprocessImage(currentOCRImage);
+
+        const { data: { text } } = await worker.recognize(preprocessedImage);
 
         console.log('=== OCR RECOGNIZED TEXT ===');
         console.log(text);
@@ -2086,8 +2155,66 @@ async function processOCRImage() {
     }
 }
 
+// Вычисляет расстояние Левенштейна между двумя строками
+function levenshteinDistance(str1, str2) {
+    const len1 = str1.length;
+    const len2 = str2.length;
+    const matrix = [];
+
+    if (len1 === 0) return len2;
+    if (len2 === 0) return len1;
+
+    for (let i = 0; i <= len2; i++) {
+        matrix[i] = [i];
+    }
+
+    for (let j = 0; j <= len1; j++) {
+        matrix[0][j] = j;
+    }
+
+    for (let i = 1; i <= len2; i++) {
+        for (let j = 1; j <= len1; j++) {
+            const cost = str1[j - 1] === str2[i - 1] ? 0 : 1;
+            matrix[i][j] = Math.min(
+                matrix[i - 1][j] + 1,
+                matrix[i][j - 1] + 1,
+                matrix[i - 1][j - 1] + cost
+            );
+        }
+    }
+
+    return matrix[len2][len1];
+}
+
+// Находит наилучшее совпадение для строки из списка вариантов
+function findBestMatch(text, patterns) {
+    let bestScore = Infinity;
+    let bestValue = null;
+
+    for (const [pattern, value] of Object.entries(patterns)) {
+        if (text.includes(pattern)) {
+            return value;
+        }
+
+        const distance = levenshteinDistance(text, pattern);
+        const maxLen = Math.max(text.length, pattern.length);
+        const similarity = 1 - (distance / maxLen);
+
+        if (similarity > 0.7 && distance < bestScore) {
+            bestScore = distance;
+            bestValue = value;
+        }
+    }
+
+    return bestValue;
+}
+
 function parseOCRText(text, defaultType = 'order') {
     const gems = [];
+
+    text = text.replace(/\|\s*$/gm, '1');
+    text = text.replace(/\s+\|\s*(\d)/g, ' 1');
+
     const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
 
     console.log('=== PARSING OCR TEXT ===');
@@ -2100,15 +2227,56 @@ function parseOCRText(text, defaultType = 'order') {
     };
 
     const effectMapping = {
+        // Доп. урон
         'доп': 'additionalDamage',
         'допурон': 'additionalDamage',
+        'эрон': 'additionalDamage',
+        'дотэрон': 'additionalDamage',
+        'доврон': 'additionalDamage',
+        'долурюнлт': 'additionalDamage',
+        'долугон': 'additionalDamage',
+        'делугон': 'additionalDamage',
+        'долурон': 'additionalDamage',
+
+        // Эффективность стимы (стигмы)
         'стигм': 'brandPower',
+        'стим': 'brandPower',
         'эффективностьстигмы': 'brandPower',
+        'эффективностьстимы': 'brandPower',
+        'эффектоносъ': 'brandPower',
+        'эффектонось': 'brandPower',
+        'эффектыюсь': 'brandPower',
+        'эффектинось': 'brandPower',
+        'эффеэтивность': 'brandPower',
+        'стемы': 'brandPower',
+        'стоы': 'brandPower',
+        'семы': 'brandPower',
+        'стилмы': 'brandPower',
+        'стима': 'brandPower',
+
+        // Сила атаки соратников
         'силаатакисоратников': 'allyAttackBoost',
         'атакисоратников': 'allyAttackBoost',
+        'сиатнор': 'allyAttackBoost',
+
+        // Урон соратников
         'уронсоратников': 'allyDamageBoost',
         'онсоратни': 'allyDamageBoost',
+        'соржников': 'allyDamageBoost',
+        'соржтоков': 'allyDamageBoost',
+        'уренсоратников': 'allyDamageBoost',
+        'сератников': 'allyDamageBoost',
+
+        // Сила атаки
         'силаатаки': 'attack',
+        'сажтаю': 'attack',
+        'снаатан': 'attack',
+        'спажтан': 'attack',
+        'солагтаки': 'attack',
+        'сажтан': 'attack',
+        'атаки': 'attack',
+
+        // Урон по боссам
         'уронпобоссам': 'bossDamage',
         'боссам': 'bossDamage',
     };
@@ -2119,7 +2287,7 @@ function parseOCRText(text, defaultType = 'order') {
     let skipNextLine = false;
 
     for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
+        let line = lines[i];
         console.log(`Line ${i}: "${line}"`);
 
         if (/порядок|order|хаос|chaos/i.test(line)) {
@@ -2134,17 +2302,40 @@ function parseOCRText(text, defaultType = 'order') {
             continue;
         }
 
-        // STEP 1: Берем первый символ строки (это почти всегда цифра) - заряд или очки
-        let firstChar = line.trim()[0];
+        // STEP 0: Удаляем ВСЕ пробелы из строки для упрощения парсинга
+        const lineNoSpaces = line.replace(/\s+/g, '');
+        console.log(`  -> Step 0: Line without spaces = "${lineNoSpaces}"`);
 
-        // фикса на случай, когда тройка почему-то как Е распознается
-        if (firstChar === 'Е' || firstChar === 'E') {
-            firstChar = '3';
-            console.log('  -> Fixed: Replaced "Е"/"E" with "3"');
+        // STEP 1: Берем первый символ строки (это почти всегда цифра) - заряд или очки
+        let firstChar = lineNoSpaces[0];
+
+        // Маппинг частых ошибок OCR для первого символа (цифры)
+        const digitMapping = {
+            'Е': '3',
+            'E': '3',
+            'Э': '5',
+            'з': '3',  // маленькая з похожа на 3
+            'З': '3',  // большая З похожа на 3
+            'В': '5',  // В похоже на 5
+            'Б': '6',  // Б похоже на 6
+            'О': '0',  // О - это ноль
+            'о': '0',  // маленькая о - это ноль
+            'I': '1',  // I похоже на 1
+            'l': '1',  // l похоже на 1
+            'А': '4',  // А похоже на 4
+            'а': '4',  // маленькая а похожа на 4
+            'К': '3',  // К иногда распознаётся вместо 3
+            'М': '3',  // М иногда вместо 3
+            'Г': '6',  // Иногда и такое бывает да
+        };
+
+        if (digitMapping[firstChar]) {
+            console.log(`  -> Fixed: Replaced "${firstChar}" with "${digitMapping[firstChar]}"`);
+            firstChar = digitMapping[firstChar];
         }
 
         if (!firstChar || !/\d/.test(firstChar)) {
-            console.log('  -> First character is not a digit, skipping');
+            console.log(`  -> First character "${firstChar}" is not a digit, skipping`);
             if (expectingWillpower) {
                 skipNextLine = true;
             } else {
@@ -2155,10 +2346,10 @@ function parseOCRText(text, defaultType = 'order') {
         const number = parseInt(firstChar);
         console.log(`  -> Step 1: First digit = ${number}`);
 
-        // STEP 2: Удаляем все до первого символа "|"
-        const pipeIndex = line.indexOf('|');
-        if (pipeIndex === -1) {
-            console.log('  -> No "|" found, skipping');
+        // STEP 2: Ищем первую букву (начало названия эффекта)
+        const match = lineNoSpaces.match(/[А-Яа-яЁё]/);
+        if (!match) {
+            console.log('  -> No russian letters found, skipping');
             if (expectingWillpower) {
                 skipNextLine = true;
             } else {
@@ -2166,13 +2357,22 @@ function parseOCRText(text, defaultType = 'order') {
             }
             continue;
         }
-        let afterPipe = line.substring(pipeIndex + 1).trim();
-        console.log(`  -> Step 2: After "|" = "${afterPipe}"`);
 
-        // STEP 3: Ищем "ур. ", берем следующий символ как цифру уровня (| = 1)
-        const urIndex = afterPipe.toLowerCase().indexOf('ур.');
+        const textPart = lineNoSpaces.substring(match.index);
+        console.log(`  -> Step 2: Text part (from first letter) = "${textPart}"`);
+
+        // STEP 3: Ищем "ур" (может быть "ур." или просто "ур"), берем следующий символ как цифру уровня
+        const textLower = textPart.toLowerCase();
+        let urIndex = textLower.lastIndexOf('ур.');
+        let urLength = 3;
+
         if (urIndex === -1) {
-            console.log('  -> No "ур." found, skipping');
+            urIndex = textLower.lastIndexOf('ур');
+            urLength = 2;
+        }
+
+        if (urIndex === -1) {
+            console.log('  -> No "ур" found, skipping');
             if (expectingWillpower) {
                 skipNextLine = true;
             } else {
@@ -2180,7 +2380,9 @@ function parseOCRText(text, defaultType = 'order') {
             }
             continue;
         }
-        const afterUr = afterPipe.substring(urIndex + 3).trim();
+
+        const afterUr = textPart.substring(urIndex + urLength);
+        console.log(`  -> Step 3a: Found "ур" at index ${urIndex}, after it: "${afterUr}"`);
 
         if (!afterUr || afterUr.length === 0) {
             console.log(`  -> No level found after "ур." (line may be cut off), skipping`);
@@ -2207,24 +2409,18 @@ function parseOCRText(text, defaultType = 'order') {
             }
             continue;
         }
-        console.log(`  -> Step 3: Level = ${level}`);
+        console.log(`  -> Step 3b: Level = ${level}`);
 
-        // STEP 4: Удаляем все после "ур. " включая этот участок
-        const effectText = afterPipe.substring(0, urIndex).trim();
-        console.log(`  -> Step 4: Effect text before cleanup = "${effectText}"`);
+        // STEP 4: Берём текст до "ур"
+        const effectText = textPart.substring(0, urIndex);
+        console.log(`  -> Step 4: Effect text = "${effectText}"`);
 
-        // STEP 5: Переводим в нижний регистр и УДАЛЯЕМ ВСЕ ПРОБЕЛЫ И ТОЧКИ
-        const effectNormalized = effectText.toLowerCase().replace(/[\s.]/g, '');
+        // STEP 5: Переводим в нижний регистр и удаляем точки (пробелы уже удалены в Step 0)
+        const effectNormalized = effectText.toLowerCase().replace(/\./g, '');
         console.log(`  -> Step 5: Effect text (normalized) = "${effectNormalized}"`);
 
-        let effectName = null;
-        for (const [key, value] of Object.entries(effectMapping)) {
-            if (effectNormalized.includes(key)) {
-                effectName = value;
-                console.log(`  -> Matched effect: "${key}" -> ${value}`);
-                break;
-            }
-        }
+        // Используем умное сопоставление с учетом расстояния Левенштейна
+        const effectName = findBestMatch(effectNormalized, effectMapping);
 
         if (!effectName) {
             console.log(`  -> No matching effect found for: "${effectNormalized}"`);
@@ -2234,6 +2430,8 @@ function parseOCRText(text, defaultType = 'order') {
                 expectingWillpower = true;
             }
             continue;
+        } else {
+            console.log(`  -> Matched effect: "${effectNormalized}" -> ${effectName}`);
         }
 
         if (expectingWillpower) {

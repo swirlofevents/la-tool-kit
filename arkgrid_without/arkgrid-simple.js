@@ -1048,6 +1048,66 @@ function restoreState(config) {
 
 let currentOCRImage = null;
 
+// Препроцессинг изображения для улучшения OCR
+function preprocessImage(imageData) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = function() {
+            // Создаём canvas с увеличенным размером (upscaling в 3 раза для лучшего качества)
+            const canvas = document.createElement('canvas');
+            const scale = 3;
+            canvas.width = img.width * scale;
+            canvas.height = img.height * scale;
+            const ctx = canvas.getContext('2d');
+
+            // Отрисовываем увеличенное изображение с сглаживанием
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            // Получаем пиксели
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imgData.data;
+
+            // Конвертируем в градации серого 
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+
+                const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+
+                data[i] = gray;
+                data[i + 1] = gray;
+                data[i + 2] = gray;
+            }
+
+            ctx.putImageData(imgData, 0, 0);
+
+            const finalData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const finalPixels = finalData.data;
+
+            // Подбираем порог - для жёлтого текста на тёмном фоне нужен низкий порог
+            const threshold = 100;
+
+            for (let i = 0; i < finalPixels.length; i += 4) {
+                const brightness = finalPixels[i];
+                const value = brightness > threshold ? 255 : 0;
+
+                finalPixels[i] = value;
+                finalPixels[i + 1] = value;
+                finalPixels[i + 2] = value;
+            }
+
+            ctx.putImageData(finalData, 0, 0);
+
+            resolve(canvas.toDataURL());
+        };
+        img.src = imageData;
+    });
+}
+
+
 function openOCRModal() {
     document.getElementById('ocr-modal').style.display = 'flex';
     resetOCRModal();
@@ -1140,24 +1200,33 @@ async function processOCRImage() {
         statusText.textContent = 'Инициализация OCR...';
         progressFill.style.width = '10%';
 
-        const worker = await Tesseract.createWorker('rus+eng', 1, {
+        const worker = await Tesseract.createWorker('rus', 1, {
             workerPath: '../js/tesseract/worker.min.js',
             langPath: '../js/tesseract/lang-data',
             corePath: '../js/tesseract/tesseract-core.wasm.js',
-            gzip: false, 
+            gzip: false,
             logger: m => {
                 if (m.status === 'recognizing text') {
-                    const progress = Math.round(m.progress * 70) + 20; 
+                    const progress = Math.round(m.progress * 70) + 20;
                     progressFill.style.width = `${progress}%`;
                     statusText.textContent = `Распознавание текста: ${Math.round(m.progress * 100)}%`;
                 }
             }
         });
 
+        // Настраиваем параметры Tesseract для лучшего распознавания
+        await worker.setParameters({
+            tessedit_char_whitelist: 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя0123456789.| ',
+            tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+        });
+
         statusText.textContent = 'Обработка изображения...';
         progressFill.style.width = '20%';
 
-        const { data: { text } } = await worker.recognize(currentOCRImage);
+        // Применяем препроцессинг к изображению
+        const preprocessedImage = await preprocessImage(currentOCRImage);
+
+        const { data: { text } } = await worker.recognize(preprocessedImage);
 
         statusText.textContent = 'Анализ результатов...';
         progressFill.style.width = '90%';
@@ -1211,6 +1280,11 @@ async function processOCRImage() {
 
 function parseOCRTextSimple(text, defaultType = 'order') {
     const gems = [];
+
+    // Предобработка текста: заменяем | на 1 в конце строк (частая ошибка OCR)
+    text = text.replace(/\|\s*$/gm, '1');
+    text = text.replace(/\s+\|\s*(\d)/g, ' 1');
+
     const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
 
     console.log('=== PARSING OCR TEXT (SIMPLE) ===');
@@ -1220,7 +1294,7 @@ function parseOCRTextSimple(text, defaultType = 'order') {
     const numbers = [];
 
     for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
+        let line = lines[i];
         console.log(`Line ${i}: "${line}"`);
 
         if (/порядок|order|хаос|chaos/i.test(line)) {
@@ -1228,12 +1302,34 @@ function parseOCRTextSimple(text, defaultType = 'order') {
             continue;
         }
 
-        let firstChar = line.trim()[0];
+        const lineNoSpaces = line.replace(/\s+/g, '');
+        console.log(`  -> Line without spaces: "${lineNoSpaces}"`);
 
-        // фикса на случай, когда тройка почему-то как Е распознается
-        if (firstChar === 'Е' || firstChar === 'E') {
-            firstChar = '3';
-            console.log('  -> Fixed: Replaced "Е"/"E" with "3"');
+        let firstChar = lineNoSpaces[0];
+
+        // Маппинг частых ошибок OCR для первого символа (цифры)
+        const digitMapping = {
+            'Е': '3',
+            'E': '3',
+            'Э': '5',
+            'з': '3',  // маленькая з похожа на 3
+            'З': '3',  // большая З похожа на 3
+            'В': '5',  // В похоже на 5
+            'Б': '6',  // Б похоже на 6
+            'О': '0',  // О - это ноль
+            'о': '0',  // маленькая о - это ноль
+            'I': '1',  // I похоже на 1
+            'l': '1',  // l похоже на 1
+            'А': '4',  // А похоже на 4
+            'а': '4',  // маленькая а похожа на 4
+            'К': '3',  // К иногда распознаётся вместо 3
+            'М': '3',  // М иногда вместо 3
+            'Г': '6',  // Иногда и такое бывает да
+        };
+
+        if (digitMapping[firstChar]) {
+            console.log(`  -> Fixed: Replaced "${firstChar}" with "${digitMapping[firstChar]}"`);
+            firstChar = digitMapping[firstChar];
         }
 
         if (firstChar && /\d/.test(firstChar)) {
@@ -1241,7 +1337,7 @@ function parseOCRTextSimple(text, defaultType = 'order') {
             numbers.push(number);
             console.log(`  -> Extracted digit: ${number}`);
         } else {
-            console.log(`  -> No digit found, skipping`);
+            console.log(`  -> No digit found (char: "${firstChar}"), skipping`);
         }
     }
 
