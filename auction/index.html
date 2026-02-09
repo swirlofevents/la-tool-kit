@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Калькулятор аукциона</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/variables.css">
+    <link rel="stylesheet" href="../css/common.css">
+    <link rel="stylesheet" href="../css/components/buttons.css">
+    <link rel="stylesheet" href="../css/style.css?v=1757912465">
+    <script src="../locales/ru.js"></script>
+    <script src="../locales/language-switcher.js"></script>
+</head>
+<body>
+    <main>
+        <h1 data-i18n="ui.auctionTitle">Калькулятор послерейдового аукциона</h1>
+        <div class="filters">
+            <a href="../" class="nav-button" data-i18n="ui.mainPage">На главную</a>
+        </div>
+        <div class="calculator-container">
+            <div class="input-group">
+                <input type="number" id="market-price" inputmode="numeric" pattern="[0-9]*" placeholder="Введите рыночную цену предмета" data-i18n-placeholder="auction.marketPriceInput">
+            </div>
+            <div class="input-group">
+                <div class="radio-group">
+                    <input type="radio" id="party-4" name="party-size" value="4">
+                    <label for="party-4" data-i18n="auction.party4">4 игрока</label>
+                    <input type="radio" id="party-8" name="party-size" value="8" checked>
+                    <label for="party-8" data-i18n="auction.party8">8 игроков</label>
+                    <input type="radio" id="party-16" name="party-size" value="16">
+                    <label for="party-16" data-i18n="auction.party16">16 игроков</label>
+                </div>
+            </div>
+            <div class="result-container">
+                <table id="result-table">
+                    <thead>
+                        <tr>
+                            <th data-i18n="auction.profitMargin">Маржа прибыли</th>
+                            <th data-i18n="auction.recommendedBid">Рекомендуемая ставка</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+    <script type="module" src="./auction.js?v=1757912465"></script>
+    <div id="toast-popup" class="toast-popup" data-i18n="auction.copiedToClipboard">Скопировано в буфер обмена</div>
+</body>
+</html>

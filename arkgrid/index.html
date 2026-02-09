@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Калькулятор оптимизации Арк Грид</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../css/variables.css">
+    <link rel="stylesheet" href="../css/common.css">
+    <link rel="stylesheet" href="../css/components/buttons.css">
+    <link rel="stylesheet" href="../css/components/modals.css">
+    <link rel="stylesheet" href="../css/components/dropdowns.css">
+    <link rel="stylesheet" href="../css/components/spinners.css">
+    <link rel="stylesheet" href="../css/arkgrid/arkgrid-effects.css?v=6">
+    <script src="../locales/ru.js"></script>
+    <script src="../locales/language-switcher.js"></script>
+</head>
+<body>
+    <main>
+        <h1 data-i18n="ui.arkgridTitle">Калькулятор оптимизации Арк Грид</h1>
+        <p class="note">Добавляйте руниты и оптимизируйте свой аркгрид. <a href="/" class="how-to-use" target="_blank">КАК ИСПОЛЬЗОВАТЬ</a></p>
+
+        <div class="filters">
+            <a href="../" class="nav-button" data-i18n="ui.mainPage">На главную</a>
+            <a href="../arkgrid_without/" class="nav-button" data-i18n="ui.withoutLink">Без эффектов</a>
+            <button id="save-btn" class="nav-button" data-i18n="ui.save">Сохранить</button>
+            <button id="load-btn" class="nav-button" data-i18n="ui.load">Загрузить</button>
+        </div>
+
+        <!-- Переключатель вкладок Порядок/Хаос вверху -->
+        <div class="tab-switcher">
+            <div class="tab-buttons">
+                <button class="tab-button active" data-tab="order" data-i18n="ui.order">Порядок</button>
+                <button class="tab-button" data-tab="chaos" data-i18n="ui.chaos">Хаос</button>
+            </div>
+        </div>
+
+        <!-- Верхний контейнер (2 колонки) -->
+        <div class="top-container">
+            <!-- Левый блок: Выбор класса + ДЖжобавление рунитов -->
+            <div class="gem-input-container">
+                <div class="character-class-section">
+                    <h2 data-i18n="ui.characterClass">Выбор класса</h2>
+                    <div id="character-class-selector">
+                    </div>
+                </div>
+
+                <div class="gem-input-section">
+                    <h2 data-i18n="ui.gemInput">Ввод рунитов</h2>
+                    <div class="gem-input-form" id="gem-input-form">
+                    </div>
+                    <button id="add-gem-btn" class="nav-button" data-i18n="ui.addGem">Добавить рунит</button>
+                </div>
+
+                <!-- Кнопка OCR -->
+                <div class="ocr-scan-section">
+                    <button id="ocr-scan-btn" class="ocr-scan-button" title="Распознать руниты из скриншота">
+                        Сканировать из скриншота
+                    </button>
+                </div>
+            </div>
+
+            <!-- Правый блок: Список рунитов (переключается по вкладке) -->
+            <div class="gem-list-container">
+                <div class="gem-list-section" id="order-gem-list-section">
+                    <div class="gem-list-header">
+                        <h2 data-i18n="ui.orderGems">Руниты Порядка</h2>
+                        <button id="clear-order-gems-btn" class="clear-gems-btn" title="Удалить все руниты Порядка">Очистить все</button>
+                    </div>
+                    <div class="gem-list" id="order-gem-list"></div>
+                </div>
+                <div class="gem-list-section" id="chaos-gem-list-section" style="display: none;">
+                    <div class="gem-list-header">
+                        <h2 data-i18n="ui.chaosGems">Руниты Хаоса</h2>
+                        <button id="clear-chaos-gems-btn" class="clear-gems-btn" title="Удалить все руниты Хаоса">Очистить все</button>
+                    </div>
+                    <div class="gem-list" id="chaos-gem-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Контейнер ядер -->
+        <div class="core-container">
+            <div class="core-column" id="order-core-column">
+            </div>
+            <div class="core-column" id="chaos-core-column" style="display: none;">
+            </div>
+        </div>
+
+        <div class="calculation-buttons">
+            <button id="calculate-btn" data-i18n="ui.calculate">Рассчитать оптимальную комбинацию</button>
+        </div>
+
+
+    </main>
+
+    <!-- Модальное окно сохранения -->
+    <div id="save-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2 id="save-modal-title" data-i18n="ui.saveData">Сохранение данных</h2>
+            <input type="text" id="save-name-input" placeholder="Название сохранения" data-i18n-placeholder="ui.saveName">
+            <div class="modal-buttons">
+                <button id="save-modal-confirm-btn" class="nav-button" data-i18n="ui.save">Сохранить</button>
+                <button id="save-modal-cancel-btn" class="nav-button" data-i18n="ui.cancel">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно загрузки -->
+    <div id="load-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content load-modal-content">
+            <h2 id="load-modal-title" data-i18n="ui.loadData">Загрузка данных</h2>
+            <div id="saves-list" class="saves-list">
+            </div>
+            <p id="no-saves-message" class="no-saves-message" style="display: none;" data-i18n="messages.noSaves">Нет сохранённых конфигураций</p>
+            <div class="modal-buttons">
+                <button id="export-btn" class="nav-button" data-i18n="ui.export">Экспорт в файл</button>
+                <button id="import-btn" class="nav-button" data-i18n="ui.import">Импорт из файла</button>
+                <input type="file" id="import-file-input" accept=".json" style="display: none;">
+                <button id="load-modal-cancel-btn" class="nav-button" data-i18n="ui.cancel">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно уведомлений -->
+    <div id="alert-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <p id="alert-modal-message"></p>
+            <div class="modal-buttons">
+                <button id="alert-modal-ok-btn" class="nav-button" data-i18n="ui.ok">ОК</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно редактирования рунита -->
+    <div id="gem-edit-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2 id="gem-edit-modal-title" data-i18n="ui.gemEdit">Редактирование рунита</h2>
+            <div id="gem-edit-form">
+            </div>
+            <div class="modal-buttons">
+                <button id="gem-edit-save-btn" class="nav-button" data-i18n="ui.save">Сохранить</button>
+                <button id="gem-edit-cancel-btn" class="nav-button" data-i18n="ui.cancel">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно экспорта -->
+    <div id="export-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content load-modal-content">
+            <h2 id="export-modal-title">Выбор конфигураций для экспорта</h2>
+            <div class="export-select-all">
+                <label>
+                    <input type="checkbox" id="export-select-all-checkbox">
+                    <span>Выбрать все</span>
+                </label>
+            </div>
+            <div id="export-saves-list" class="saves-list">
+            </div>
+            <p id="export-no-saves-message" class="no-saves-message" style="display: none;">Нет сохранённых конфигураций</p>
+            <div class="modal-buttons">
+                <button id="export-modal-confirm-btn" class="nav-button">Экспортировать выбранные</button>
+                <button id="export-modal-cancel-btn" class="nav-button" data-i18n="ui.cancel">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно OCR -->
+    <div id="ocr-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content ocr-modal-content">
+            <h2 id="ocr-modal-title">Распознавание рунитов из скриншота</h2>
+            <div class="ocr-upload-area" id="ocr-upload-area">
+                <input type="file" id="ocr-file-input" accept="image/*" style="display: none;">
+                <div class="ocr-upload-placeholder">
+                    <div class="ocr-icon">📷</div>
+                    <p>Нажмите или перетащите скриншот сюда</p>
+                    <p class="ocr-hint">Или нажмите Ctrl+V для вставки из буфера обмена</p>
+                    <p class="ocr-hint">Поддерживаются форматы: PNG, JPG, JPEG</p>
+                </div>
+                <img id="ocr-preview" style="display: none; max-width: 100%; border-radius: 8px; margin-top: 10px;">
+            </div>
+            <div id="ocr-progress" style="display: none; margin-top: 15px;">
+                <div class="ocr-progress-bar">
+                    <div class="ocr-progress-fill" id="ocr-progress-fill"></div>
+                </div>
+                <p class="ocr-status-text" id="ocr-status-text">Подготовка к распознаванию...</p>
+            </div>
+            <div class="modal-buttons">
+                <button id="ocr-process-btn" class="nav-button" style="display: none;">Распознать</button>
+                <button id="ocr-modal-cancel-btn" class="nav-button">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="spinner-modal" class="modal-overlay" style="display: none;">
+        <div class="spinner-content">
+            <div class="spinner"></div>
+            <p class="spinner-text" data-i18n="ui.calculating">Расчет оптимальной комбинации...</p>
+        </div>
+    </div>
+
+    <!-- Tesseract.js -->
+    <script src="../js/tesseract/tesseract.min.js"></script>
+    <script src="./arkgrid-with-effects.js?v=16"></script>
+</body>
+</html>

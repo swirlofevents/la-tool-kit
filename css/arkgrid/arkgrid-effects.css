@@ -1,0 +1,130 @@
+
+@import '../variables.css';
+@import './arkgrid-common.css';
+
+
+
+
+main {
+    width: 1200px;
+    margin: auto;
+}
+
+
+.gem-input-container {
+    flex: 0 0 420px;
+}
+
+
+
+
+#calculate-btn {
+    width: 1200px;
+}
+
+
+
+
+.custom-select-wrapper {
+    width: 150px;
+}
+
+
+
+
+.gem-item-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+
+.gem-item-title {
+    font-weight: 600;
+    font-size: 18px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.gem-item-sub-options {
+    font-size: 15px;
+    color: #aaa;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    line-height: 1.15;
+}
+
+
+
+
+.gem-socket-content .gem-item-details {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    overflow: hidden;
+    flex: 1;
+    min-width: 0;
+}
+
+.gem-socket-content .gem-item-title {
+    font-weight: 600;
+    font-size: 18px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.gem-socket-content .gem-item-sub-options {
+    font-size: 15px;
+    color: #aaa;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    line-height: 1.15;
+}
+
+.gem-socket-content .gem-item-sub-options span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+
+
+
+#gem-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 10px 0;
+}
+
+#gem-edit-form .gem-input-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+#gem-edit-form label {
+    width: 80px;
+    text-align: right;
+    font-weight: 500;
+    color: #C89B3C;
+    flex-shrink: 0;
+}
+
+#gem-edit-form .custom-select-wrapper {
+    flex-grow: 1;
+}
+
+
+#gem-edit-form .gem-input-row .custom-select-wrapper:nth-of-type(1) {
+    flex-grow: 3;
+}
+
+#gem-edit-form .gem-input-row .custom-select-wrapper:nth-of-type(2) {
+    flex-grow: 1;
+    min-width: 80px;
+}
