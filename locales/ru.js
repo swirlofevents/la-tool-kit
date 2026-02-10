@@ -38,6 +38,8 @@ window.LOCALE = {
     gemList: 'Список рунитов',
     addGem: 'Добавить рунит',
     calculate: 'Рассчитать оптимальную комбинацию',
+    calculatePoints: 'Приоритет: Очки',
+    calculateEffectiveness: 'Приоритет: Эффективность',
 
     // Табы и категории
     orderCores: 'Ядра Порядка',
