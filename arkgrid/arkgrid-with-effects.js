@@ -1235,10 +1235,10 @@ function renderGemLists() {
             };
 
             const subOption1Text = gem.subOption1 && gem.subOption1Level
-                ? `${getSubOptionDisplay(gem.subOption1)} Lv.${gem.subOption1Level}`
+                ? `${getSubOptionDisplay(gem.subOption1)} ур.${gem.subOption1Level}`
                 : t('messages.gemWithoutEffects');
             const subOption2Text = gem.subOption2 && gem.subOption2Level
-                ? `${getSubOptionDisplay(gem.subOption2)} Lv.${gem.subOption2Level}`
+                ? `${getSubOptionDisplay(gem.subOption2)} ур.${gem.subOption2Level}`
                 : t('messages.gemWithoutEffects');
             detailsHtml = `
                 <div class="gem-item-details">
@@ -1479,12 +1479,12 @@ function renderResult(slotId, core, result) {
                 subOptionsHtml = '';
             } else {
                 titleText = `${gem.name} (W:${gem.willpower}/P:${gem.point})`;
-                const subOption1Text = gem.subOption1 && gem.subOption1Level ? `${gem.subOption1} Lv.${gem.subOption1Level}` : '';
-                const subOption2Text = gem.subOption2 && gem.subOption2Level ? `${gem.subOption2} Lv.${gem.subOption2Level}` : '';
+                const subOption1Text = gem.subOption1 && gem.subOption1Level ? `${gem.subOption1} ур.${gem.subOption1Level}` : '';
+                const subOption2Text = gem.subOption2 && gem.subOption2Level ? `${gem.subOption2} ур.${gem.subOption2Level}` : '';
                 subOptionsHtml = `
                     <div class="gem-item-sub-options">
-                       ${subOption1Text ? `<span>${subOption1Text}</span>` : ''}
-                       ${subOption2Text ? `<span>${subOption2Text}</span>` : ''}
+                        ${subOption1Text ? `<span>${subOption1Text}</span>` : ''}
+                        ${subOption2Text ? `<span>${subOption2Text}</span>` : ''}
                     </div>
                 `;
             }
@@ -1835,7 +1835,7 @@ function openGemEditPopup(gem) {
         gemInfo.subOptions.map(opt => ({ id: opt, name: getLocalizedSubOption(opt) })),
         onSelect
     );
-    const subOption1LevelDropdown = createCustomDropdown('edit-gem-sub-option-1-level', `Lv.${gem.subOption1Level}`, [1, 2, 3, 4, 5].map(l => ({ id: l, name: `Lv.${l}` })), onSelect);
+    const subOption1LevelDropdown = createCustomDropdown('edit-gem-sub-option-1-level', `ур.${gem.subOption1Level}`, [1, 2, 3, 4, 5].map(l => ({ id: l, name: `ур.${l}` })), onSelect);
     subOption1LevelDropdown.dataset.value = gem.subOption1Level;
     subOption1Row.appendChild(subOption1LevelDropdown);
     gemEditForm.appendChild(subOption1Row);
@@ -1849,7 +1849,7 @@ function openGemEditPopup(gem) {
         gemInfo.subOptions.map(opt => ({ id: opt, name: getLocalizedSubOption(opt) })),
         onSelect
     );
-    const subOption2LevelDropdown = createCustomDropdown('edit-gem-sub-option-2-level', `Lv.${gem.subOption2Level}`, [1, 2, 3, 4, 5].map(l => ({ id: l, name: `Lv.${l}` })), onSelect);
+    const subOption2LevelDropdown = createCustomDropdown('edit-gem-sub-option-2-level', `ур.${gem.subOption2Level}`, [1, 2, 3, 4, 5].map(l => ({ id: l, name: `ур.${l}` })), onSelect);
     subOption2LevelDropdown.dataset.value = gem.subOption2Level;
     subOption2Row.appendChild(subOption2LevelDropdown);
     gemEditForm.appendChild(subOption2Row);
@@ -1921,6 +1921,86 @@ function saveGemEdit() {
 
 
 let currentOCRImage = null;
+
+// Нарезает бинаризованное изображение на горизонтальные строки
+// Возвращает массив data URL, каждый - одна строка текста
+function sliceIntoRows(imageDataUrl) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = function() {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const pixels = imgData.data;
+            const width = canvas.width;
+            const height = canvas.height;
+
+            const rowWhiteCount = [];
+            for (let y = 0; y < height; y++) {
+                let count = 0;
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    if (pixels[idx] > 200) count++;
+                }
+                rowWhiteCount.push(count);
+            }
+
+            const minWhite = 2; // минимум белых пикселей чтобы считать строку непустой
+            const rowImages = [];
+            let inRow = false;
+            let rowStart = 0;
+
+            for (let y = 0; y < height; y++) {
+                const hasContent = rowWhiteCount[y] >= minWhite;
+
+                if (!inRow && hasContent) {
+                    inRow = true;
+                    rowStart = y;
+                } else if (inRow && !hasContent) {
+                    inRow = false;
+                    const rowHeight = y - rowStart;
+
+                    if (rowHeight > 10) {
+                        const rowCanvas = document.createElement('canvas');
+                        const padding = 4;
+                        rowCanvas.width = width;
+                        rowCanvas.height = rowHeight + padding * 2;
+                        const rowCtx = rowCanvas.getContext('2d');
+
+                        rowCtx.fillStyle = 'black';
+                        rowCtx.fillRect(0, 0, rowCanvas.width, rowCanvas.height);
+
+                        rowCtx.drawImage(canvas, 0, rowStart, width, rowHeight, 0, padding, width, rowHeight);
+                        rowImages.push(rowCanvas.toDataURL());
+                    }
+                }
+            }
+
+            if (inRow) {
+                const rowHeight = height - rowStart;
+                if (rowHeight > 10) {
+                    const rowCanvas = document.createElement('canvas');
+                    const padding = 4;
+                    rowCanvas.width = width;
+                    rowCanvas.height = rowHeight + padding * 2;
+                    const rowCtx = rowCanvas.getContext('2d');
+                    rowCtx.fillStyle = 'black';
+                    rowCtx.fillRect(0, 0, rowCanvas.width, rowCanvas.height);
+                    rowCtx.drawImage(canvas, 0, rowStart, width, rowHeight, 0, padding, width, rowHeight);
+                    rowImages.push(rowCanvas.toDataURL());
+                }
+            }
+
+            console.log(`sliceIntoRows: найдено ${rowImages.length} строк`);
+            resolve(rowImages);
+        };
+        img.src = imageDataUrl;
+    });
+}
 
 // Препроцессинг изображения для улучшения OCR
 function preprocessImage(imageData) {
@@ -2088,10 +2168,10 @@ async function processOCRImage() {
             }
         });
 
-        // Настраиваем параметры Tesseract для лучшего распознавания
+        // Настраиваем параметры Tesseract для построчного распознавания
         await worker.setParameters({
             tessedit_char_whitelist: 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя0123456789.| ',
-            tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+            tessedit_pageseg_mode: Tesseract.PSM.SINGLE_LINE,
         });
 
         statusText.textContent = 'Обработка изображения...';
@@ -2100,7 +2180,25 @@ async function processOCRImage() {
         // Применяем препроцессинг к изображению
         const preprocessedImage = await preprocessImage(currentOCRImage);
 
-        const { data: { text } } = await worker.recognize(preprocessedImage);
+        // Нарезаем изображение на строки и распознаём каждую отдельно
+        const rowImages = await sliceIntoRows(preprocessedImage);
+        console.log(`=== Найдено строк: ${rowImages.length} ===`);
+
+        const lines = [];
+        for (let i = 0; i < rowImages.length; i++) {
+            const progress = Math.round((i / rowImages.length) * 70) + 20;
+            progressFill.style.width = `${progress}%`;
+            statusText.textContent = `Распознавание строки ${i + 1} из ${rowImages.length}...`;
+
+            const { data: { text: lineText } } = await worker.recognize(rowImages[i]);
+            const cleaned = lineText.trim().replace(/\n/g, ' ').trim();
+            if (cleaned.length > 0) {
+                lines.push(cleaned);
+                console.log(`Строка ${i}: "${cleaned}"`);
+            }
+        }
+
+        const text = lines.join('\n');
 
         console.log('=== OCR RECOGNIZED TEXT ===');
         console.log(text);
