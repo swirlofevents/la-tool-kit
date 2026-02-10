@@ -64,6 +64,7 @@ window.LOCALE = {
     gemName: 'Название рунита',
     willpower: 'Заряд',
     points: 'Очки',
+    effectiveness: 'Эффективность',
     subOption1: 'Доп. эффект 1',
     subOption2: 'Доп. эффект 2',
     level: 'Уровень',
@@ -161,6 +162,8 @@ window.LOCALE = {
     // Расчеты
     calculationTimeout: 'Расчет превысил 5 секунд, показан лучший найденный результат',
     noOptimalFound: 'Оптимальная комбинация не найдена',
+    showBestCase: 'Цель не достигнута, показана лучшая комбинация',
+    fineCalculate: 'Цель достигнута!',
     workerError: 'Ошибка в worker',
     calculationError: 'Ошибка при расчете',
     fatalWorkerError: 'Критическая ошибка worker',

@@ -42,11 +42,22 @@ self.onmessage = function(e) {
     try {
         // Для каждой активной коры найти все валидные комбинации, достигающие целевых очков
         const coreValidCombinations = new Map();
+        const coreBestFallbacks = new Map(); // лучшие комбинации если цель не достигнута
         for (const core of activeCores) {
             const availableGems = core.type === 'order' ? orderGems : chaosGems;
             let combinations = findAllPossibleCombinations(core.coreData, availableGems);
+
+            // Сохраняем лучший достижимый вариант как fallback (макс очков)
+            if (combinations.length > 0) {
+                const fallbackSorted = [...combinations].sort((a, b) => {
+                    if (a.points !== b.points) return b.points - a.points;
+                    return a.willpower - b.willpower;
+                });
+                coreBestFallbacks.set(core.id, fallbackSorted[0]);
+            }
+
             combinations = combinations.filter(c => c.points >= core.targetPoint);
-            combinations.sort((a, b) => b.points - a.points); // Сортировка по убыванию очков
+            combinations.sort((a, b) => b.points - a.points);
             coreValidCombinations.set(core.id, combinations);
         }
 
@@ -89,24 +100,65 @@ self.onmessage = function(e) {
             const combinations = coreValidCombinations.get(core.id);
             const remainingMaxScore = maxPossibleFutureScore - maxPointsPerCore[core.id];
 
-            // Путь 1: Назначить комбинацию текущей коре
             if (combinations && combinations.length > 0) {
+                let anyNonConflict = false;
                 for (const combination of combinations) {
                     const combinationGemIds = combination.gems.map(g => g.id);
                     const hasConflict = combinationGemIds.some(id => usedGemIds.has(id));
 
                     if (!hasConflict) {
+                        anyNonConflict = true;
                         const newUsedGemIds = new Set([...usedGemIds, ...combinationGemIds]);
                         currentAssignment[core.id] = combination;
                         solve(coreIndex + 1, currentAssignment, currentScore + combination.points, newUsedGemIds, remainingMaxScore);
-                        delete currentAssignment[core.id]; // Backtracking
+                        delete currentAssignment[core.id];
                         if (timedOut) return;
                     }
                 }
+                // Все валидные комбинации конфликтуют — ищем лучшее из оставшихся рунитов
+                if (!anyNonConflict) {
+                    const availableGems = core.type === 'order' ? orderGems : chaosGems;
+                    const freeGems = availableGems.filter(g => !usedGemIds.has(g.id));
+                    const freeCombos = findAllPossibleCombinations(core.coreData, freeGems);
+                    if (freeCombos.length > 0) {
+                        freeCombos.sort((a, b) => {
+                            if (a.points !== b.points) return b.points - a.points;
+                            return a.willpower - b.willpower;
+                        });
+                        const bestFree = freeCombos[0];
+                        const newUsedGemIds = new Set([...usedGemIds, ...bestFree.gems.map(g => g.id)]);
+                        currentAssignment[core.id] = { ...bestFree, achieved: false };
+                        solve(coreIndex + 1, currentAssignment, currentScore + bestFree.points, newUsedGemIds, remainingMaxScore);
+                        delete currentAssignment[core.id];
+                    } else {
+                        currentAssignment[core.id] = { gems: [], points: 0, willpower: 0, achieved: false };
+                        solve(coreIndex + 1, currentAssignment, currentScore, usedGemIds, remainingMaxScore);
+                        delete currentAssignment[core.id];
+                    }
+                }
+            } else {
+                // Цель не достигнута - используем лучший достижимый вариант как fallback
+                const fallback = coreBestFallbacks.get(core.id);
+                if (fallback) {
+                    const fallbackGemIds = fallback.gems.map(g => g.id);
+                    const hasConflict = fallbackGemIds.some(id => usedGemIds.has(id));
+                    if (!hasConflict) {
+                        const newUsedGemIds = new Set([...usedGemIds, ...fallbackGemIds]);
+                        currentAssignment[core.id] = { ...fallback, achieved: false };
+                        solve(coreIndex + 1, currentAssignment, currentScore + fallback.points, newUsedGemIds, remainingMaxScore);
+                        delete currentAssignment[core.id];
+                    } else {
+                        // Fallback тоже конфликтует - ставим пустой слот
+                        currentAssignment[core.id] = { gems: [], points: 0, willpower: 0, achieved: false };
+                        solve(coreIndex + 1, currentAssignment, currentScore, usedGemIds, remainingMaxScore);
+                        delete currentAssignment[core.id];
+                    }
+                } else {
+                    currentAssignment[core.id] = { gems: [], points: 0, willpower: 0, achieved: false };
+                    solve(coreIndex + 1, currentAssignment, currentScore, usedGemIds, remainingMaxScore);
+                    delete currentAssignment[core.id];
+                }
             }
-
-            // Пропустить текущую кору (не назначать комбинацию)
-            solve(coreIndex + 1, currentAssignment, currentScore, usedGemIds, remainingMaxScore);
         }
 
         solve(0, {}, 0, new Set(), totalMaxPossibleScore);

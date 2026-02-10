@@ -759,13 +759,15 @@ function calculate() {
                     if (result) {
                         result.gems.forEach(gem => {
                             assignedGemIds.set(gem.id, {
-                                coreType: core.coreTypeId,  // 'sun', 'moon', or 'star'
-                                slotId: core.id,            // 'order-1', 'chaos-2' итд
-                                gemType: core.type          // 'order' or 'chaos'
+                                coreType: core.coreTypeId,
+                                slotId: core.id,
+                                gemType: core.type
                             });
                         });
+                        renderResult(core.id, core.coreData, { ...result, achieved: result.achieved !== false });
+                    } else {
+                        renderResult(core.id, core.coreData, { achieved: false });
                     }
-                    renderResult(core.id, core.coreData, { ...(result || {}), achieved: !!result });
                 });
             } else {
                  activeCores.forEach(core => {
@@ -802,14 +804,19 @@ function hideSpinner() {
 function renderResult(slotId, core, result) {
     const socketContainer = document.getElementById(`sockets-${slotId}`);
     const summaryEl = document.getElementById(`summary-${slotId}`);
+    const slotElement = document.getElementById(`slot-${slotId}`);
 
-    if (!result.achieved || result.points === undefined || result.points <= -1) {
-        const slotElement = document.getElementById(`slot-${slotId}`);
+    slotElement.classList.remove('target-failed');
+
+    if (!result || (!result.achieved && (!result.gems || result.gems.length === 0))) {
         slotElement.classList.add('target-failed');
         summaryEl.textContent = t('messages.noOptimalFound');
         return;
     }
 
+    if (!result.achieved) {
+        slotElement.classList.add('target-failed');
+    }
 
     result.gems.forEach((gem, index) => {
         if (socketContainer.children[index]) {
@@ -828,7 +835,8 @@ function renderResult(slotId, core, result) {
         }
     });
 
-    summaryEl.innerHTML = `[${t('ui.willpower')}: ${result.willpower} / ${core.willpower}] [${t('ui.points')}: ${result.points}]`;
+    const achievedText = result.achieved === false ? ` ⚠ ${t('messages.showBestCase')}` : ` ✔ ${t('messages.fineCalculate')}`;
+    summaryEl.innerHTML = `[${t('ui.willpower')}: ${result.willpower} / ${core.willpower}] [${t('ui.points')}: ${result.points}]${achievedText}`;
 }
 
 

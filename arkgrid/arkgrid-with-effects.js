@@ -1426,7 +1426,7 @@ function calculate() {
                         const localizedResult = {
                             ...result,
                             gems: gemsFromWorkerFormat(result.gems),
-                            achieved: true
+                            achieved: result.achieved !== false
                         };
                         renderResult(core.id, core.coreData, localizedResult);
                     } else {
@@ -1462,10 +1462,14 @@ function renderResult(slotId, core, result) {
 
     slotElement.classList.remove('target-failed');
 
-    if (!result || !result.achieved) {
+    if (!result || (!result.achieved && (!result.gems || result.gems.length === 0))) {
         slotElement.classList.add('target-failed');
         summaryEl.textContent = t('messages.noOptimalFound');
         return;
+    }
+
+    if (!result.achieved) {
+        slotElement.classList.add('target-failed');
     }
 
     result.gems.forEach((gem, index) => {
@@ -1501,8 +1505,9 @@ function renderResult(slotId, core, result) {
             socket.classList.add('gem-equipped');
         }
     });
-    const scoreText = result.effectivenessScore !== undefined ? `[${t('ui.willpower')}: ${(result.effectivenessScore * 100).toFixed(4)}%]` : '';
-    summaryEl.innerHTML = `[${t('ui.willpower')}: ${result.willpower} / ${core.willpower}] [${t('ui.points')}: ${result.points}] ${scoreText}`;
+    const scoreText = result.effectivenessScore !== undefined ? ` [${t('ui.effectiveness')}: ${(result.effectivenessScore * 100).toFixed(4)}%]` : '';
+    const achievedText = result.achieved === false ? ` ⚠ ${t('messages.showBestCase')}` : ` ✔ ${t('messages.fineCalculate')}`;
+    summaryEl.innerHTML = `[${t('ui.willpower')}: ${result.willpower} / ${core.willpower}] [${t('ui.points')}: ${result.points}] ${scoreText} ${achievedText}`;
 }
 
 
