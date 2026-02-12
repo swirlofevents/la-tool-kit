@@ -2430,6 +2430,7 @@ function parseOCRText(text, defaultType = 'order') {
             'К': '3',  // К иногда распознаётся вместо 3
             'М': '3',  // М иногда вместо 3
             'Г': '6',  // Иногда и такое бывает да
+            'Ь': '3',  // бред какой-то
         };
 
         if (digitMapping[firstChar]) {
